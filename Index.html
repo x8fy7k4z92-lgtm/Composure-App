@@ -1,0 +1,941 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Composure — Behavioral Investment Alignment</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+<style>
+  body { font-family: 'Inter', system-ui, sans-serif; }
+  .fade-in { animation: fadeIn 0.3s ease; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  .btn-primary { background: #1A2B4A; color: white; padding: 10px 20px; border-radius: 8px; font-size: 14px; font-weight: 500; border: none; cursor: pointer; transition: background 0.15s; }
+  .btn-primary:hover { background: #2C5282; }
+  .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-secondary { background: white; color: #1A2B4A; border: 1.5px solid #1A2B4A; padding: 10px 20px; border-radius: 8px; font-size: 14px; font-weight: 500; cursor: pointer; transition: background 0.15s; }
+  .btn-secondary:hover { background: #f8fafc; }
+  .card { background: white; border-radius: 12px; border: 1px solid #E2E8F0; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+  input, select { width: 100%; border: 1px solid #D1D5DB; border-radius: 8px; padding: 10px 12px; font-size: 14px; outline: none; transition: border 0.15s, box-shadow 0.15s; }
+  input:focus, select:focus { border-color: #2C5282; box-shadow: 0 0 0 3px rgba(44,82,130,0.12); }
+  label { display: block; font-size: 13px; font-weight: 500; color: #374151; margin-bottom: 6px; }
+  .tab-btn { padding: 12px 20px; font-size: 14px; font-weight: 500; border: none; background: none; cursor: pointer; border-bottom: 2px solid transparent; color: #6B7280; transition: all 0.15s; }
+  .tab-btn.active { border-bottom-color: #1A2B4A; color: #1A2B4A; }
+  .tab-btn:hover:not(.active) { color: #374151; }
+  ::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-track { background: #f1f5f9; } ::-webkit-scrollbar-thumb { background: #CBD5E0; border-radius: 3px; }
+  @media print { .no-print { display: none !important; } }
+</style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- APP SHELL                                                        -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div id="app"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════
+// DATA STORE (localStorage)
+// ═══════════════════════════════════════════════════════════════════
+const Store = {
+  get: (k) => { try { return JSON.parse(localStorage.getItem('composure_' + k)); } catch { return null; } },
+  set: (k, v) => localStorage.setItem('composure_' + k, JSON.stringify(v)),
+  del: (k) => localStorage.removeItem('composure_' + k),
+  getUsers: () => Store.get('users') || [],
+  saveUser: (u) => { const users = Store.getUsers(); const i = users.findIndex(x => x.id === u.id); if (i >= 0) users[i] = u; else users.push(u); Store.set('users', users); },
+  getUser: (id) => Store.getUsers().find(u => u.id === id) || null,
+  getUserByEmail: (e) => Store.getUsers().find(u => u.email === e) || null,
+  currentUser: () => Store.get('current_user'),
+  setCurrentUser: (u) => Store.set('current_user', u),
+  clearSession: () => { Store.del('current_user'); },
+  getAssessments: () => Store.get('assessments') || [],
+  saveAssessment: (a) => { const list = Store.getAssessments(); const i = list.findIndex(x => x.id === a.id); if (i >= 0) list[i] = a; else list.push(a); Store.set('assessments', list); },
+  getAssessmentByUser: (uid) => Store.getAssessments().find(a => a.userId === uid) || null,
+};
+
+// ═══════════════════════════════════════════════════════════════════
+// SEED DEMO DATA
+// ═══════════════════════════════════════════════════════════════════
+function seedDemoData() {
+  if (Store.get('seeded')) return;
+
+  const advisorId = 'adv_001';
+  const advisor = { id: advisorId, email: 'advisor@composure.demo', password: 'Advisor123', firstName: 'Alexandra', lastName: 'Vance', role: 'ADVISOR' };
+  Store.saveUser(advisor);
+
+  const clients = [
+    { id: 'cli_001', email: 'margaret.chen@demo.com', password: 'Client123', firstName: 'Margaret', lastName: 'Chen', role: 'CLIENT',
+      advisorId, profile: { age: 68, incomeRange: '$250K–$500K', investableAssetsRange: '$1M–$5M', liquidityNeedLevel: 'MODERATE', timeHorizonYears: 10, taxSensitivityLevel: 'HIGH', legacyPriorityLevel: 6, employmentStatus: 'Semi-retired', dependents: 0 }},
+    { id: 'cli_002', email: 'david.okafor@demo.com', password: 'Client123', firstName: 'David', lastName: 'Okafor', role: 'CLIENT',
+      advisorId, profile: { age: 48, incomeRange: '$500K–$1M', investableAssetsRange: '$5M–$10M', liquidityNeedLevel: 'LOW', timeHorizonYears: 20, taxSensitivityLevel: 'VERY_HIGH', legacyPriorityLevel: 8, employmentStatus: 'Business owner', dependents: 2 }},
+    { id: 'cli_003', email: 'ryan.thornton@demo.com', password: 'Client123', firstName: 'Ryan', lastName: 'Thornton', role: 'CLIENT',
+      advisorId, profile: { age: 35, incomeRange: 'Above $1M', investableAssetsRange: '$1M–$5M', liquidityNeedLevel: 'MINIMAL', timeHorizonYears: 30, taxSensitivityLevel: 'MODERATE', legacyPriorityLevel: 9, employmentStatus: 'Technology sector', dependents: 1 }}
+  ];
+
+  clients.forEach(c => {
+    Store.saveUser(c);
+    // Generate realistic answers and score them
+    const responses = generateDemoResponses(c.id === 'cli_001' ? 'conservative' : c.id === 'cli_002' ? 'balanced' : 'aggressive');
+    const result = scoreAssessment(responses);
+    Store.saveAssessment({ id: 'asmt_' + c.id, userId: c.id, advisorId, responses, result, completedAt: new Date().toISOString(), profile: c.profile });
+  });
+
+  Store.set('seeded', true);
+}
+
+function generateDemoResponses(profile) {
+  return QUESTIONS.map(q => {
+    let base = profile === 'conservative' ? (q.directionality === 'positive' ? 2 : 4)
+             : profile === 'aggressive'   ? (q.directionality === 'positive' ? 4 : 2) : 3;
+    const v = Math.round((Math.random() - 0.5) * 1.4);
+    return { questionId: q.id, answerValue: Math.max(1, Math.min(5, base + v)) };
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// QUESTIONS (25)
+// ═══════════════════════════════════════════════════════════════════
+const QUESTIONS = [
+  { id:'q01', number:1, scenario:'Your portfolio has declined 14% over six weeks during broad market turbulence. Long-term fundamentals remain unchanged and your advisor confirms no structural issues.', statement:'I would remain comfortable maintaining my current allocation without making defensive changes.', dimension:'lossAversion', weight:0.40, directionality:'positive' },
+  { id:'q02', number:2, scenario:'Strategy A returns +9% annually with occasional down years of –5 to –8%. Strategy B returns +11% annually but with periodic down years reaching –18 to –22%.', statement:'The additional long-term return of Strategy B justifies its deeper periodic drawdowns.', dimension:'lossAversion', weight:0.35, directionality:'positive' },
+  { id:'q03', number:3, scenario:'Your portfolio gained 22% last year. This year it is down 11%. You are still meaningfully ahead on a two-year basis.', statement:'I find it easy to focus on the two-year result rather than the current drawdown.', dimension:'lossAversion', weight:0.25, directionality:'positive' },
+  { id:'q04', number:4, scenario:'During elevated volatility, your monthly account statement shows a value that varies by 8–12% from one month to the next, even while progressing toward long-term targets.', statement:'Month-to-month fluctuations of this magnitude do not affect my day-to-day sense of financial security.', dimension:'volatilityTolerance', weight:0.40, directionality:'positive' },
+  { id:'q05', number:5, scenario:'A credible financial commentator argues that current valuations are unsustainable and a correction of 20–30% is likely within 12 months.', statement:'I would not alter my long-term portfolio allocation based on this prediction, even if it proved accurate in hindsight.', dimension:'volatilityTolerance', weight:0.35, directionality:'positive' },
+  { id:'q06', number:6, scenario:'Three close peers mention they have moved significant portions of their portfolios to cash during recent market uncertainty.', statement:'Their decisions would not prompt me to reconsider my own allocation strategy.', dimension:'volatilityTolerance', weight:0.25, directionality:'positive' },
+  { id:'q07', number:7, scenario:'Your portfolio has declined 26% from its recent peak over nine months. Historical analysis suggests recovery to prior highs within 18–30 months assuming no allocation change.', statement:'I could tolerate this drawdown without altering my portfolio, provided my advisor confirms the recovery thesis remains credible.', dimension:'drawdownResilience', weight:0.40, directionality:'positive' },
+  { id:'q08', number:8, scenario:'You are reviewing your portfolio during what proves to be the trough of a market cycle. Your account is showing its worst value in four years.', statement:'Moments of maximum pessimism in markets represent potential opportunity, and I could act on that view rather than retreating to defensiveness.', dimension:'drawdownResilience', weight:0.35, directionality:'positive' },
+  { id:'q09', number:9, scenario:'Your equity allocation loses 32% during a bear market. Fixed income partially offsets the decline and your overall portfolio is down 19%.', statement:'Knowing my fixed income position partially protected me, I would feel confident the overall portfolio construction is working as intended.', dimension:'drawdownResilience', weight:0.25, directionality:'positive' },
+  { id:'q10', number:10, scenario:'You have a 12–15 year investment horizon. Your portfolio declines significantly in year two. A cash-heavy alternative would have avoided this decline.', statement:'A short-term loss early in a long horizon does not make me question whether I should have taken less risk at the outset.', dimension:'horizonConviction', weight:0.50, directionality:'positive' },
+  { id:'q11', number:11, scenario:'Economic forecasters are increasingly projecting a difficult decade ahead for global equities due to demographic and debt headwinds.', statement:'My long-term investment strategy does not require me to have a confident view on decade-length macroeconomic forecasts.', dimension:'horizonConviction', weight:0.50, directionality:'positive' },
+  { id:'q12', number:12, scenario:'You have 12 months of living expenses in accessible savings outside your investment portfolio. An unexpected expense requires you to draw 6 months of that reserve.', statement:'I would not feel compelled to liquidate any investment positions to rebuild my cash buffer immediately.', dimension:'liquiditySensitivity', weight:0.55, directionality:'positive' },
+  { id:'q13', number:13, scenario:'Your advisor recommends a 3-year lock-up in a private credit strategy offering an expected yield premium of 2.5% annually over comparable public alternatives.', statement:'The illiquidity of this structure would not cause me significant discomfort, provided the yield premium and credit quality are appropriate.', dimension:'liquiditySensitivity', weight:0.45, directionality:'positive' },
+  { id:'q14', number:14, scenario:'Over three consecutive quarters, your portfolio underperforms its benchmark by 4%, 6%, and 3%. Your advisor attributes this to deliberate underweight of a highly valued concentrated sector.', statement:'I would maintain confidence in the strategy, accepting the explanation without requiring benchmark-matching performance.', dimension:'confidenceDispersion', weight:0.50, directionality:'positive' },
+  { id:'q15', number:15, scenario:'Two trusted and financially sophisticated friends hold opposing strong views on whether you should increase or decrease your equity allocation given current conditions.', statement:'Conflicting external opinions would not cause me to question my existing investment policy.', dimension:'confidenceDispersion', weight:0.50, directionality:'positive' },
+  { id:'q16', number:16, scenario:'You are five years from planned retirement. A significant equity market correction reduces your portfolio by 22%, temporarily extending your required working years by an estimated 18 months.', statement:'I understand this risk is inherent to maintaining growth-oriented exposure near retirement and have accepted it as part of my strategy.', dimension:'sequenceRiskSensitivity', weight:0.40, directionality:'positive' },
+  { id:'q17', number:17, scenario:'You begin taking portfolio withdrawals in retirement. In year two of withdrawals, equities decline 18% and you must sell assets at depressed prices to fund living expenses.', statement:'I would remain comfortable with my existing equity allocation, trusting the recovery will outweigh the sequence impact over a 20-year retirement horizon.', dimension:'sequenceRiskSensitivity', weight:0.35, directionality:'positive' },
+  { id:'q18', number:18, scenario:'Historical data shows investors who stayed fully invested through 2008–2009 recovered to prior highs within 4 years. Those who sold at trough required 9+ years to recover purchasing power.', statement:'This historical pattern gives me confidence I would maintain my allocation through a comparable event.', dimension:'sequenceRiskSensitivity', weight:0.25, directionality:'positive' },
+  { id:'q19', number:19, scenario:'You remained fully invested while a colleague moved to cash before a 15% market correction. Your portfolio declined; theirs did not. The market subsequently recovered fully within 8 months.', statement:'I would not feel significant regret about my decision, understanding it was consistent with my long-term strategy.', dimension:'regretAvoidance', weight:0.55, directionality:'positive' },
+  { id:'q20', number:20, scenario:'You declined an investment your advisor suggested. It subsequently returned 34% in 18 months.', statement:'Missing this opportunity, while disappointing, would not cause me to override my systematic decision framework in the future.', dimension:'regretAvoidance', weight:0.45, directionality:'positive' },
+  { id:'q21', number:21, scenario:'Your portfolio generates approximately 30% of your annual living expenses. In a difficult year, income distributions decline 20% due to dividend cuts and lower bond coupons.', statement:'I would be comfortable supplementing the shortfall from capital rather than repositioning toward higher-yield instruments.', dimension:'incomeReliance', weight:0.55, directionality:'positive' },
+  { id:'q22', number:22, scenario:'A total return portfolio with no predictable income stream will likely outperform an income-focused portfolio by 1.8% annually over 15 years, net of fees.', statement:'The higher expected return of the total return approach would outweigh my preference for predictable income distributions.', dimension:'incomeReliance', weight:0.45, directionality:'positive' },
+  { id:'q23', number:23, scenario:'You can structure a portfolio with a defined capital floor guaranteeing no more than 8% loss in any calendar year, in exchange for capping upside at 9% annually.', statement:'The uncapped potential of a traditional allocation strategy is more appealing to me than the defined capital floor.', dimension:'capitalPreservationPriority', weight:0.40, directionality:'positive' },
+  { id:'q24', number:24, scenario:'You have accumulated assets well in excess of your lifetime spending needs. A substantial loss would not materially affect your standard of living.', statement:'Since my essential lifestyle is fully funded, I am comfortable maintaining a meaningfully growth-oriented posture with surplus capital.', dimension:'capitalPreservationPriority', weight:0.35, directionality:'positive' },
+  { id:'q25', number:25, scenario:'Your estate planning goal is to transfer meaningful wealth to the next generation. A more aggressive strategy will likely produce 40% more transferable wealth over 20 years, but with higher interim volatility.', statement:'For the portion of my portfolio designated for legacy transfer, higher interim volatility is acceptable in exchange for materially better long-term outcomes.', dimension:'capitalPreservationPriority', weight:0.25, directionality:'positive' },
+];
+
+const DIM_WEIGHTS = { lossAversion:0.14, volatilityTolerance:0.12, drawdownResilience:0.14, horizonConviction:0.10, liquiditySensitivity:0.08, confidenceDispersion:0.08, sequenceRiskSensitivity:0.12, regretAvoidance:0.08, incomeReliance:0.06, capitalPreservationPriority:0.08 };
+
+const ALLOCATION_MAP = {
+  GUARDED:   { equityMin:15, equityMax:35, fixedMin:45, fixedMax:60, altMin:0, altMax:10, cashMin:5, cashMax:15, label:'15–35% Equity' },
+  MEASURED:  { equityMin:30, equityMax:50, fixedMin:35, fixedMax:50, altMin:0, altMax:15, cashMin:2, cashMax:10, label:'30–50% Equity' },
+  BALANCED:  { equityMin:45, equityMax:65, fixedMin:25, fixedMax:40, altMin:5, altMax:15, cashMin:2, cashMax:8,  label:'45–65% Equity' },
+  RESOLUTE:  { equityMin:60, equityMax:80, fixedMin:10, fixedMax:25, altMin:5, altMax:20, cashMin:0, cashMax:5,  label:'60–80% Equity' },
+  ASSERTIVE: { equityMin:75, equityMax:95, fixedMin:0,  fixedMax:15, altMin:5, altMax:20, cashMin:0, cashMax:5,  label:'75–95% Equity' },
+};
+
+const VOLATILITY_MAP = { GUARDED:'±5–10% annualized', MEASURED:'±8–13% annualized', BALANCED:'±10–16% annualized', RESOLUTE:'±13–20% annualized', ASSERTIVE:'±17–25% annualized' };
+const DRAWDOWN_MAP =   { GUARDED:'–8 to –15%', MEASURED:'–12 to –20%', BALANCED:'–18 to –28%', RESOLUTE:'–25 to –38%', ASSERTIVE:'–32 to –50%' };
+
+const BAND_LABELS = { GUARDED:'Guarded', MEASURED:'Measured', BALANCED:'Balanced', RESOLUTE:'Resolute', ASSERTIVE:'Assertive' };
+
+// ═══════════════════════════════════════════════════════════════════
+// SCORING ENGINE
+// ═══════════════════════════════════════════════════════════════════
+function scoreAssessment(responses) {
+  const respMap = {};
+  responses.forEach(r => respMap[r.questionId] = r.answerValue);
+
+  // Normalize per question
+  const dimScores = {};
+  const dimWeights = {};
+
+  QUESTIONS.forEach(q => {
+    const v = respMap[q.id];
+    if (v === undefined) return;
+    let norm = ((v - 1) / 4) * 100;
+    if (q.directionality === 'negative') norm = 100 - norm;
+    const weighted = norm * q.weight;
+    if (!dimScores[q.dimension]) { dimScores[q.dimension] = 0; dimWeights[q.dimension] = 0; }
+    dimScores[q.dimension] += weighted;
+    dimWeights[q.dimension] += q.weight;
+  });
+
+  const dims = {};
+  Object.keys(dimScores).forEach(d => { dims[d] = dimWeights[d] > 0 ? dimScores[d] / dimWeights[d] : 50; });
+
+  let composite = 0, totalW = 0;
+  Object.entries(DIM_WEIGHTS).forEach(([d, w]) => { composite += (dims[d] || 50) * w; totalW += w; });
+  const raw = composite / totalW;
+
+  const band = raw <= 20 ? 'GUARDED' : raw <= 40 ? 'MEASURED' : raw <= 60 ? 'BALANCED' : raw <= 80 ? 'RESOLUTE' : 'ASSERTIVE';
+  const alloc = ALLOCATION_MAP[band];
+
+  const factors = {
+    lossAversion: Math.round(100 - (dims.lossAversion || 50)),
+    volatilityTolerance: Math.round(dims.volatilityTolerance || 50),
+    drawdownResilience: Math.round(dims.drawdownResilience || 50),
+    horizonConviction: Math.round(dims.horizonConviction || 50),
+    liquiditySensitivity: Math.round(100 - (dims.liquiditySensitivity || 50)),
+    confidenceDispersion: Math.round(dims.confidenceDispersion || 50),
+    sequenceRiskSensitivity: Math.round(100 - (dims.sequenceRiskSensitivity || 50)),
+    regretAvoidance: Math.round(100 - (dims.regretAvoidance || 50)),
+    incomeReliance: Math.round(100 - (dims.incomeReliance || 50)),
+    capitalPreservation: Math.round(100 - (dims.capitalPreservationPriority || 50)),
+  };
+
+  const primaryFlag = getPrimaryFlag(factors);
+  const stressProfile = getStressProfile(factors);
+  const narrative = getNarrative(band);
+
+  return { raw: Math.round(raw * 10) / 10, band, alloc, factors, primaryFlag, stressProfile, narrative, volatility: VOLATILITY_MAP[band], maxDrawdown: DRAWDOWN_MAP[band] };
+}
+
+function getPrimaryFlag(f) {
+  const flags = [];
+  if (f.lossAversion > 70) flags.push({ label: 'Elevated loss aversion — losses may trigger disproportionate distress', s: f.lossAversion });
+  if (f.volatilityTolerance < 40) flags.push({ label: 'Below-average volatility tolerance — short-cycle statements likely to generate contact', s: 100 - f.volatilityTolerance });
+  if (f.drawdownResilience < 40) flags.push({ label: 'Drawdown sensitivity — allocation ceiling should be adjusted downward', s: 100 - f.drawdownResilience });
+  if (f.sequenceRiskSensitivity > 65) flags.push({ label: 'Heightened sequence risk sensitivity — glide-path or bucket structure advisable', s: f.sequenceRiskSensitivity });
+  if (f.liquiditySensitivity > 65) flags.push({ label: 'Liquidity sensitivity — alternatives allocations require careful sizing', s: f.liquiditySensitivity });
+  if (f.regretAvoidance > 65) flags.push({ label: 'Regret-avoidance tendency — social comparison scenarios may prompt reactive requests', s: f.regretAvoidance });
+  flags.sort((a,b) => b.s - a.s);
+  return flags[0]?.label || 'No dominant behavioral flag. Composure profile is well-distributed across dimensions.';
+}
+
+function getStressProfile(f) {
+  if (f.lossAversion > 75 && f.drawdownResilience < 40) return 'Under market stress, this client is likely to seek defensive reallocation. Strong advisor communication protocol and pre-agreed action triggers are essential.';
+  if (f.lossAversion > 60) return 'Moderate stress sensitivity. Client may show uncertainty during prolonged underperformance. Proactive advisor contact is recommended during drawdown periods.';
+  if (f.lossAversion < 40 && f.drawdownResilience > 65) return 'Demonstrates resilience under simulated stress. Unlikely to initiate reactive changes during drawdowns. Well-suited for long-duration, volatility-tolerant strategies.';
+  return 'Stress response is moderate and proportionate to drawdown experienced. Standard communication protocols are likely sufficient.';
+}
+
+function getNarrative(band) {
+  const n = {
+    GUARDED: 'Your investment profile reflects a deliberate orientation toward capital stability. Your responses indicate that protecting against significant loss carries substantial weight in your financial decision-making. Your recommended allocation framework prioritizes income-generating assets and limits equity exposure, providing a foundation designed to absorb market stress with minimal disruption to your financial confidence.',
+    MEASURED: 'Your investment profile reflects a considered balance between protecting capital and participating in long-term market growth. You demonstrate an awareness of market cycles, with a preference for measured equity exposure that allows for meaningful growth while limiting the depth of potential losses.',
+    BALANCED: 'Your investment profile reflects a well-calibrated equilibrium between growth and resilience. You show comfort with market fluctuations as a normal feature of long-term investing and demonstrate the capacity to hold your strategy through periods of uncertainty.',
+    RESOLUTE: 'Your investment profile reflects a growth-oriented conviction with strong resilience characteristics. You demonstrate the capacity to maintain your investment strategy through meaningful market cycles, with an understanding that volatility is inseparable from long-term wealth creation.',
+    ASSERTIVE: 'Your investment profile reflects a high-conviction, return-seeking orientation. You demonstrate the behavioral stability to withstand significant market dislocations without compromising your long-term strategy. Your responses indicate comfort with deep drawdown cycles, understanding that the price of meaningful long-term wealth compounding is tolerance for short-term volatility.',
+  };
+  return n[band];
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// IPS GENERATOR
+// ═══════════════════════════════════════════════════════════════════
+function generateIPS(assessment) {
+  const { result, profile } = assessment;
+  const { band, alloc, factors, primaryFlag, stressProfile, volatility, maxDrawdown } = result;
+  const bandLabel = BAND_LABELS[band];
+  const today = new Date().toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' });
+  const user = Store.getUser(assessment.userId);
+  const name = `${user.firstName} ${user.lastName}`;
+
+  return {
+    clientProfileSummary: `This Investment Policy Statement has been prepared for ${name}, age ${profile.age}, as of ${today}. Employment status: ${profile.employmentStatus || 'Not specified'}. Financial dependents: ${profile.dependents ?? 0}.\n\nAnnual household income falls within the range of ${profile.incomeRange}. Investable assets are estimated in the range of ${profile.investableAssetsRange}, excluding primary residence and defined benefit pension obligations where applicable.\n\nThe client's stated investment time horizon is ${profile.timeHorizonYears} year${profile.timeHorizonYears !== 1 ? 's' : ''}, which serves as the primary planning framework for strategic asset allocation construction. Tax sensitivity is assessed as ${profile.taxSensitivityLevel.toLowerCase().replace('_',' ')}.\n\nLegacy transfer priority is rated ${profile.legacyPriorityLevel}/10. ${profile.legacyPriorityLevel >= 7 ? 'Legacy transfer is a high-priority objective. A portion of investable assets is designated for generational transfer, and strategy for those assets should reflect a longer effective time horizon than the client\'s personal horizon.' : profile.legacyPriorityLevel >= 4 ? 'Legacy transfer is a meaningful secondary objective.' : 'Legacy transfer is not a primary objective. The portfolio is designed principally for the client\'s lifetime financial security.'}`,
+
+    investmentObjectives: `The primary investment objective for this portfolio is ${{GUARDED:'capital preservation with modest real return above inflation', MEASURED:'capital preservation with supplemental income and limited real growth', BALANCED:'balanced total return through income and capital appreciation over the full market cycle', RESOLUTE:'long-term capital growth through equity-oriented total return, accepting cyclical volatility', ASSERTIVE:'maximum long-term capital compounding consistent with broad diversification principles'}[band]} over the ${profile.timeHorizonYears}-year investment horizon.\n\nThe client's assessed tolerance for peak-to-trough drawdown is estimated at ${maxDrawdown}. Portfolio construction should be designed such that the probability of breaching this threshold in any given calendar year does not exceed 10% under historically calibrated stress scenarios.\n\nThe portfolio is designed to function as a ${bandLabel}-profile allocation, reflecting a Composure Index assessment that characterizes this client's decision-making orientation, stress response profile, and sustained tolerance under realistic market conditions.`,
+
+    riskAndBehavioralAlignment: `The client's Composure Index reflects a ${bandLabel} behavioral alignment profile, derived from a structured 25-question behavioral assessment measuring ten distinct dimensions of investment decision-making.\n\nBehavioral Factor Summary:\n• Loss Aversion: ${factors.lossAversion > 70 ? 'elevated' : factors.lossAversion > 50 ? 'moderate' : 'low'} (${factors.lossAversion}/100)\n• Volatility Tolerance: ${factors.volatilityTolerance > 60 ? 'high' : factors.volatilityTolerance > 40 ? 'moderate' : 'low'} (${factors.volatilityTolerance}/100)\n• Drawdown Resilience: ${factors.drawdownResilience > 60 ? 'high' : factors.drawdownResilience > 40 ? 'moderate' : 'low'} (${factors.drawdownResilience}/100)\n• Horizon Conviction: ${factors.horizonConviction > 60 ? 'strong' : factors.horizonConviction > 40 ? 'moderate' : 'weak'} (${factors.horizonConviction}/100)\n• Liquidity Sensitivity: ${factors.liquiditySensitivity > 60 ? 'elevated' : factors.liquiditySensitivity > 40 ? 'moderate' : 'low'} (${factors.liquiditySensitivity}/100)\n• Confidence Stability: ${factors.confidenceDispersion > 60 ? 'high' : factors.confidenceDispersion > 40 ? 'moderate' : 'low'} (${factors.confidenceDispersion}/100)\n\nThe allocation framework — ${alloc.label} — reflects a deliberate calibration between the client's financial capacity to sustain losses and their behavioral capacity to maintain investment discipline during those periods.\n\nExpected annualized volatility: ${volatility}. Assessed maximum drawdown tolerance: ${maxDrawdown}.\n\nPrimary behavioral consideration: ${primaryFlag}`,
+
+    strategicAssetAllocation: `The following strategic asset allocation ranges are established for the ${bandLabel} Composure Index profile:\n\nGlobal Equity:              ${alloc.equityMin}% – ${alloc.equityMax}%\nFixed Income:               ${alloc.fixedMin}% – ${alloc.fixedMax}%\nAlternative Investments:    ${alloc.altMin}% – ${alloc.altMax}%\nCash and Cash Equivalents:  ${alloc.cashMin}% – ${alloc.cashMax}%\n\nThese ranges represent the outer bounds of permissible allocation under normal market conditions. The advisor retains discretion to position within these ranges based on market conditions and the client's evolving circumstances.\n\nWithin the equity allocation, a globally diversified approach is recommended. Home-country bias should be limited to no more than 60% of total equity exposure. ${profile.taxSensitivityLevel === 'HIGH' || profile.taxSensitivityLevel === 'VERY_HIGH' ? 'Given elevated tax sensitivity, tax-managed strategies, direct indexing, or systematic loss harvesting should be evaluated as primary implementation vehicles.' : ''}`,
+
+    rebalancingPolicy: `The portfolio shall be rebalanced when any asset class weight drifts more than ${band === 'GUARDED' || band === 'MEASURED' ? 5 : 6} percentage points from its strategic target, or when the equity allocation breaches the outer bounds of the ${alloc.equityMin}%–${alloc.equityMax}% range. Rebalancing shall be reviewed no less frequently than quarterly and evaluated against tax efficiency considerations before execution.\n\nIn taxable accounts, the advisor may elect to allow up to a ${band === 'GUARDED' || band === 'MEASURED' ? 7 : 8}-point drift if rebalancing would trigger material near-term tax liability, subject to client approval. Calendar-based rebalancing shall occur annually at minimum, irrespective of drift thresholds.`,
+
+    liquidityManagement: `The client's liquidity requirement is assessed as ${profile.liquidityNeedLevel.toLowerCase()}. ${profile.liquidityNeedLevel === 'HIGH' || profile.liquidityNeedLevel === 'CRITICAL' ? 'A minimum cash reserve of 8% of total portfolio value shall be maintained at all times. Illiquid alternative investments shall not exceed 10% of total portfolio value.' : 'A minimum cash reserve of 3% of total portfolio value shall be maintained, scalable upward during periods of elevated near-term cash demand. Illiquid alternative investments may comprise up to ' + alloc.altMax + '% of total portfolio value.'}\n\nAll fixed income positions should maintain a weighted average maturity profile consistent with the ${profile.timeHorizonYears}-year investment horizon, with a minimum of 20% of fixed income allocated to instruments maturing within 24 months.`,
+
+    monitoringAndReview: `The advisor shall conduct a formal portfolio review ${band === 'GUARDED' || band === 'MEASURED' ? 'quarterly' : 'semi-annually at minimum'}, encompassing performance attribution, asset class drift, and assessment of any material changes to the client's financial circumstances.\n\nA comprehensive Investment Policy Statement review shall occur annually or upon any of the following triggering events: (i) change in employment, marital status, or estate plan; (ii) change in liquidity requirements or income needs; (iii) change in tax status or jurisdiction; (iv) portfolio drawdown exceeding the maximum drawdown tolerance established in this document; or (v) material change in health or family circumstances with financial implications.\n\nPerformance shall be evaluated against appropriate benchmarks over rolling 3- and 5-year periods. Short-term performance deviations shall not, in isolation, constitute grounds for strategy revision.`,
+
+    behavioralDisciplineStatement: `This Investment Policy Statement reflects a Composure Index designation of ${bandLabel}, derived from a structured behavioral assessment. The resulting allocation framework — ${alloc.label} — is not solely a function of financial capacity to absorb loss, but of the client's demonstrated behavioral capacity to maintain investment discipline through the full cycle of that exposure.\n\nPrimary behavioral consideration: ${primaryFlag}\n\nStress response characterization: ${stressProfile}\n\nIn the event that the client requests a material change to portfolio allocation during a period of market volatility, the advisor is directed to: (i) document the request, (ii) reference this behavioral discipline statement and the client's Composure Index designation, (iii) allow a minimum 72-hour reflection period before executing any policy change, and (iv) confirm that the requested change reflects a genuine revision to the client's long-term objectives rather than a transient behavioral response to short-term conditions.\n\nThis protocol is intended to protect the client from behavioral interference with their own long-term financial outcomes and is not a restriction on their ultimate authority over their investments.`
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// ROUTER
+// ═══════════════════════════════════════════════════════════════════
+let currentView = 'login';
+let viewState = {};
+
+function navigate(view, state = {}) {
+  currentView = view;
+  viewState = state;
+  render();
+}
+
+function render() {
+  const app = document.getElementById('app');
+  const user = Store.currentUser();
+  if (!user && currentView !== 'login' && currentView !== 'register') {
+    currentView = 'login'; viewState = {};
+  }
+  const views = {
+    login: renderLogin, register: renderRegister,
+    clientDashboard: renderClientDashboard, clientProfile: renderClientProfile,
+    assessment: renderAssessment,
+    advisorDashboard: renderAdvisorDashboard, clientDetail: renderClientDetail,
+  };
+  app.innerHTML = (views[currentView] || renderLogin)();
+  bindEvents();
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// VIEWS
+// ═══════════════════════════════════════════════════════════════════
+
+// ── LOGIN ──────────────────────────────────────────────────────────
+function renderLogin() {
+  return `
+  <div class="min-h-screen flex">
+    <div class="hidden lg:flex lg:w-1/2 bg-[#1A2B4A] flex-col justify-between p-16">
+      <div><span class="text-white font-semibold text-xl tracking-wide">Composure</span></div>
+      <div>
+        <h1 class="text-4xl font-light text-white leading-snug mb-6">Behavioral investment<br>alignment for the<br>long-term advisor.</h1>
+        <p class="text-blue-300 text-sm leading-relaxed max-w-sm">The Composure platform measures what markets cannot — the behavioral tendencies that determine whether an investment strategy is sustainable for a specific client over time.</p>
+        <div class="mt-8 p-4 bg-blue-900/40 rounded-lg text-xs text-blue-300 leading-relaxed">
+          <p class="font-semibold mb-2 text-blue-200">Demo credentials:</p>
+          <p>Advisor: advisor@composure.demo / Advisor123</p>
+          <p class="mt-1">Clients: margaret.chen@demo.com / Client123</p>
+          <p>david.okafor@demo.com / Client123</p>
+          <p>ryan.thornton@demo.com / Client123</p>
+        </div>
+      </div>
+      <div class="text-blue-400 text-xs">Composure v1.0 · Demo</div>
+    </div>
+    <div class="flex-1 flex items-center justify-center p-8">
+      <div class="w-full max-w-sm fade-in">
+        <div class="mb-8">
+          <h2 class="text-2xl font-semibold text-gray-900">Sign in</h2>
+          <p class="text-sm text-gray-500 mt-1">Access your Composure portal</p>
+        </div>
+        <div id="login-error" class="hidden bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700 mb-4"></div>
+        <div class="space-y-4">
+          <div><label>Email</label><input id="login-email" type="email" placeholder="you@firm.com" value="advisor@composure.demo"></div>
+          <div><label>Password</label><input id="login-password" type="password" placeholder="••••••••" value="Advisor123"></div>
+          <button class="btn-primary w-full" id="login-btn">Sign in</button>
+        </div>
+        <p class="mt-6 text-center text-sm text-gray-500">Don't have an account? <a href="#" id="go-register" class="text-[#2C5282] font-medium hover:underline">Register</a></p>
+      </div>
+    </div>
+  </div>`;
+}
+
+// ── REGISTER ───────────────────────────────────────────────────────
+function renderRegister() {
+  return `
+  <div class="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4">
+    <div class="w-full max-w-md fade-in">
+      <div class="text-center mb-6"><span class="text-[#1A2B4A] font-semibold text-lg">Composure</span><h2 class="text-2xl font-semibold text-gray-900 mt-2">Create your account</h2></div>
+      <div class="card p-8">
+        <div class="flex rounded-lg border border-gray-200 p-1 mb-6 bg-gray-50">
+          <button id="role-client" class="flex-1 py-2 text-sm font-medium rounded-md transition-all bg-white text-[#1A2B4A] shadow-sm">Client</button>
+          <button id="role-advisor" class="flex-1 py-2 text-sm font-medium rounded-md transition-all text-gray-500 hover:text-gray-700">Advisor</button>
+        </div>
+        <input type="hidden" id="reg-role" value="CLIENT">
+        <div id="reg-error" class="hidden bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700 mb-4"></div>
+        <div class="space-y-4">
+          <div class="grid grid-cols-2 gap-3">
+            <div><label>First Name</label><input id="reg-first" placeholder="Jane"></div>
+            <div><label>Last Name</label><input id="reg-last" placeholder="Smith"></div>
+          </div>
+          <div><label>Email</label><input id="reg-email" type="email" placeholder="you@firm.com"></div>
+          <div><label>Password</label><input id="reg-pass" type="password" placeholder="Minimum 8 characters"></div>
+          <div id="advisor-code-wrap" class="hidden"><label>Advisor Code</label><input id="reg-code" type="password" placeholder="ADVISOR2024"></div>
+          <button class="btn-primary w-full" id="register-btn">Create account</button>
+        </div>
+        <p class="mt-5 text-center text-sm text-gray-500">Already have an account? <a href="#" id="go-login" class="text-[#2C5282] font-medium hover:underline">Sign in</a></p>
+      </div>
+    </div>
+  </div>`;
+}
+
+// ── CLIENT PROFILE SETUP ───────────────────────────────────────────
+function renderClientProfile() {
+  const user = Store.currentUser();
+  const existing = Store.getAssessmentByUser(user.id);
+  const p = existing?.profile || {};
+  return `
+  <div class="min-h-screen bg-gray-50 py-10 px-4">
+    <div class="max-w-xl mx-auto fade-in">
+      <div class="flex items-center justify-between mb-8">
+        <div><span class="text-[#1A2B4A] font-semibold">Composure</span><h1 class="text-2xl font-semibold text-gray-900 mt-3">Complete your profile</h1><p class="text-gray-500 text-sm mt-1">This information calibrates your behavioral assessment to your financial situation.</p></div>
+        <button id="signout-btn" class="text-sm text-gray-400 hover:text-gray-600">Sign out</button>
+      </div>
+      <div class="card p-8">
+        <div id="profile-error" class="hidden bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700 mb-4"></div>
+        <div class="space-y-5">
+          <div class="grid grid-cols-2 gap-4">
+            <div><label>Your Age</label><input id="p-age" type="number" min="18" max="100" placeholder="45" value="${p.age||''}"></div>
+            <div><label>Investment Horizon (years)</label><input id="p-horizon" type="number" min="1" max="50" placeholder="15" value="${p.timeHorizonYears||''}"></div>
+          </div>
+          <div><label>Annual Household Income</label>
+            <select id="p-income">
+              <option value="">Select range</option>
+              ${['Below $100K','$100K–$250K','$250K–$500K','$500K–$1M','Above $1M'].map(o=>`<option ${p.incomeRange===o?'selected':''}>${o}</option>`).join('')}
+            </select>
+          </div>
+          <div><label>Investable Assets</label>
+            <select id="p-assets">
+              <option value="">Select range</option>
+              ${['Below $250K','$250K–$1M','$1M–$5M','$5M–$10M','Above $10M'].map(o=>`<option ${p.investableAssetsRange===o?'selected':''}>${o}</option>`).join('')}
+            </select>
+          </div>
+          <div><label>Liquidity Requirement</label>
+            <select id="p-liquidity">
+              <option value="">Select level</option>
+              ${[['MINIMAL','Minimal — no near-term cash needs'],['LOW','Low — modest periodic access'],['MODERATE','Moderate — some periodic liquidity'],['HIGH','High — significant near-term requirements'],['CRITICAL','Critical — ongoing substantial withdrawals']].map(([v,l])=>`<option value="${v}" ${p.liquidityNeedLevel===v?'selected':''}>${l}</option>`).join('')}
+            </select>
+          </div>
+          <div><label>Tax Sensitivity</label>
+            <select id="p-tax">
+              <option value="">Select level</option>
+              ${[['LOW','Low'],['MODERATE','Moderate'],['HIGH','High'],['VERY_HIGH','Very High']].map(([v,l])=>`<option value="${v}" ${p.taxSensitivityLevel===v?'selected':''}>${l}</option>`).join('')}
+            </select>
+          </div>
+          <div>
+            <label>Legacy / Estate Priority <span class="text-gray-400 font-normal">(1 = not important, 10 = critical)</span></label>
+            <div class="flex items-center gap-3 mt-2">
+              <input type="range" id="p-legacy" min="1" max="10" value="${p.legacyPriorityLevel||5}" class="flex-1" style="accent-color:#1A2B4A">
+              <span id="p-legacy-val" class="w-8 text-center font-semibold text-[#1A2B4A]">${p.legacyPriorityLevel||5}</span>
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-4">
+            <div><label>Employment Status</label><input id="p-employment" placeholder="e.g. Employed, Retired" value="${p.employmentStatus||''}"></div>
+            <div><label>Financial Dependents</label><input id="p-dependents" type="number" min="0" max="20" value="${p.dependents??0}"></div>
+          </div>
+          <button class="btn-primary w-full" id="save-profile-btn">Continue to assessment</button>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+// ── ASSESSMENT ─────────────────────────────────────────────────────
+let assessmentAnswers = {};
+let assessmentCurrentIndex = 0;
+
+function renderAssessment() {
+  const q = QUESTIONS[assessmentCurrentIndex];
+  const total = QUESTIONS.length;
+  const progress = ((assessmentCurrentIndex + 1) / total) * 100;
+  const current = assessmentAnswers[q.id];
+  const allAnswered = Object.keys(assessmentAnswers).length === total;
+
+  const likert = [1,2,3,4,5].map(v => `
+    <button class="likert-btn w-full flex items-center gap-3 px-4 py-3 rounded-lg border text-sm font-medium transition-all text-left ${current===v ? 'border-[#1A2B4A] bg-[#1A2B4A] text-white' : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'}" data-val="${v}">
+      <span class="w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${current===v ? 'border-white' : 'border-gray-300'}">
+        ${current===v ? '<span class="w-2.5 h-2.5 rounded-full bg-[#1A2B4A]"></span>' : ''}
+      </span>
+      ${{1:'Strongly Disagree',2:'Disagree',3:'Neutral',4:'Agree',5:'Strongly Agree'}[v]}
+    </button>`).join('');
+
+  const dots = QUESTIONS.map((qq, i) => `<button class="dot w-2 h-2 rounded-full transition-all ${assessmentAnswers[qq.id] !== undefined ? 'bg-[#1A2B4A]' : i===assessmentCurrentIndex ? 'bg-gray-400' : 'bg-gray-200'}" data-idx="${i}"></button>`).join('');
+
+  return `
+  <div class="min-h-screen bg-gray-50">
+    <div class="bg-white border-b border-gray-200">
+      <div class="max-w-2xl mx-auto px-4 py-4 flex items-center justify-between">
+        <span class="font-semibold text-[#1A2B4A]">Composure</span>
+        <span class="text-sm text-gray-500">Question ${assessmentCurrentIndex+1} of ${total}</span>
+      </div>
+      <div class="w-full bg-gray-100 h-1.5"><div class="bg-[#1A2B4A] h-full transition-all duration-300" style="width:${progress}%"></div></div>
+    </div>
+    <div class="max-w-2xl mx-auto px-4 py-10 fade-in">
+      <div class="card p-8">
+        <div class="bg-blue-50 border border-blue-100 rounded-lg p-5 mb-6">
+          <p class="text-xs font-semibold text-blue-600 uppercase tracking-wide mb-2">Scenario</p>
+          <p class="text-gray-700 text-sm leading-relaxed">${q.scenario}</p>
+        </div>
+        <p class="text-gray-900 font-medium text-base mb-6 leading-snug">"${q.statement}"</p>
+        <div class="space-y-2" id="likert-options">${likert}</div>
+        <div class="flex justify-between text-xs text-gray-400 mt-3 px-1"><span>Strongly Disagree</span><span>Strongly Agree</span></div>
+      </div>
+      <div class="flex items-center justify-between mt-6">
+        <button class="btn-secondary" id="prev-btn" ${assessmentCurrentIndex===0?'disabled':''}>Previous</button>
+        <div class="flex gap-1" id="dots">${dots}</div>
+        ${assessmentCurrentIndex===total-1
+          ? `<button class="btn-primary" id="submit-assessment-btn" ${!allAnswered?'disabled':''}>Submit assessment</button>`
+          : `<button class="btn-primary" id="next-btn" ${current===undefined?'disabled':''}>Next</button>`}
+      </div>
+      <p class="text-center text-xs text-gray-400 mt-4">Your responses are private and will only be shared with your advisor.</p>
+    </div>
+  </div>`;
+}
+
+// ── CLIENT DASHBOARD ───────────────────────────────────────────────
+function renderClientDashboard() {
+  const user = Store.currentUser();
+  const assessment = Store.getAssessmentByUser(user.id);
+
+  if (!assessment?.result?.band) {
+    return `
+    <div class="min-h-screen bg-gray-50">
+      ${navBar(user)}
+      <div class="max-w-2xl mx-auto px-4 py-10 fade-in">
+        <div class="card p-10 text-center">
+          <div class="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg class="w-8 h-8 text-[#1A2B4A]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+          </div>
+          <h2 class="text-xl font-semibold text-gray-900 mb-2">Complete your assessment</h2>
+          <p class="text-gray-500 text-sm mb-6 max-w-sm mx-auto">Your behavioral assessment takes approximately 10 minutes and informs your investment policy and portfolio alignment.</p>
+          <button class="btn-primary" id="start-assessment-btn">Begin assessment</button>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  const { band, alloc, narrative } = assessment.result;
+  const cfg = bandConfig(band);
+  return `
+  <div class="min-h-screen bg-gray-50">
+    ${navBar(user)}
+    <div class="max-w-2xl mx-auto px-4 py-10 fade-in">
+      <div class="card p-8 mb-6 border-2 ${cfg.border} ${cfg.bg}">
+        <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Your Composure Index</p>
+        <div class="flex items-baseline gap-3 mb-5">
+          <span class="text-5xl font-bold ${cfg.text}">${BAND_LABELS[band]}</span>
+        </div>
+        <div class="mb-5">
+          <div class="flex justify-between text-xs text-gray-400 mb-1.5">
+            ${['Guarded','Measured','Balanced','Resolute','Assertive'].map(l=>`<span class="${l===BAND_LABELS[band]?`font-bold ${cfg.text}`:''}">${l}</span>`).join('')}
+          </div>
+          <div class="h-3 bg-gray-200 rounded-full overflow-hidden flex">
+            ${['GUARDED','MEASURED','BALANCED','RESOLUTE','ASSERTIVE'].map(b=>`<div class="flex-1 border-r border-white last:border-0 ${b===band?cfg.bar:'bg-gray-200'}"></div>`).join('')}
+          </div>
+        </div>
+        <div class="flex items-center gap-2 text-sm">
+          <span class="text-gray-600 font-medium">Allocation Resilience Band:</span>
+          <span class="font-semibold ${cfg.text}">${alloc.label}</span>
+        </div>
+      </div>
+      <div class="card p-8 mb-6">
+        <h3 class="font-semibold text-gray-900 mb-3">Your Behavioral Alignment Summary</h3>
+        <p class="text-gray-600 text-sm leading-relaxed">${narrative}</p>
+      </div>
+      <div class="card p-6 bg-gray-50/50">
+        <p class="text-sm text-gray-500 text-center">Your full investment policy statement has been shared with your advisor. They will review your profile and reach out to discuss your investment strategy.</p>
+        <p class="text-xs text-gray-400 text-center mt-2">Assessment completed ${new Date(assessment.completedAt).toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'})}</p>
+      </div>
+    </div>
+  </div>`;
+}
+
+// ── ADVISOR DASHBOARD ──────────────────────────────────────────────
+function renderAdvisorDashboard() {
+  const user = Store.currentUser();
+  const assessments = Store.getAssessments().filter(a => a.advisorId === user.id);
+
+  const bandCounts = {};
+  assessments.forEach(a => { if (a.result?.band) bandCounts[a.result.band] = (bandCounts[a.result.band]||0) + 1; });
+
+  const statsBar = ['GUARDED','MEASURED','BALANCED','RESOLUTE','ASSERTIVE'].map(b => {
+    const cfg = bandConfig(b); const count = bandCounts[b] || 0;
+    return `<div class="card p-4 ${cfg.bg}"><div class="flex items-center gap-2 mb-1"><span class="w-2 h-2 rounded-full ${cfg.dot}"></span><span class="text-xs font-semibold ${cfg.text}">${BAND_LABELS[b]}</span></div><p class="text-2xl font-bold ${cfg.text}">${count}</p></div>`;
+  }).join('');
+
+  const rows = assessments.map(a => {
+    const client = Store.getUser(a.userId);
+    if (!client) return '';
+    const cfg = a.result?.band ? bandConfig(a.result.band) : null;
+    return `<tr class="border-b border-gray-100 hover:bg-gray-50 transition-colors cursor-pointer" data-client-id="${a.userId}">
+      <td class="px-5 py-4"><div class="font-medium text-gray-900 text-sm">${client.firstName} ${client.lastName}</div><div class="text-gray-400 text-xs mt-0.5">${client.email}</div></td>
+      <td class="px-5 py-4 text-sm text-gray-600">${a.profile?.investableAssetsRange||'—'}</td>
+      <td class="px-5 py-4 text-sm text-gray-600">${a.profile?.timeHorizonYears||'—'}y</td>
+      <td class="px-5 py-4">${cfg&&a.result?.band?`<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${cfg.bg} ${cfg.text}"><span class="w-1.5 h-1.5 rounded-full ${cfg.dot}"></span>${BAND_LABELS[a.result.band]}</span>`:'<span class="text-xs text-gray-400">Pending</span>'}</td>
+      <td class="px-5 py-4 text-sm text-gray-600">${a.result?.alloc?.label||'—'}</td>
+      <td class="px-5 py-4 text-xs text-gray-400">${a.completedAt?new Date(a.completedAt).toLocaleDateString():'—'}</td>
+      <td class="px-5 py-4"><button class="text-sm text-[#2C5282] font-medium hover:underline view-client-btn" data-client-id="${a.userId}">View</button></td>
+    </tr>`;
+  }).join('');
+
+  return `
+  <div class="min-h-screen bg-gray-50">
+    <header class="bg-[#1A2B4A] text-white">
+      <div class="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
+        <div class="flex items-center gap-3"><span class="font-semibold text-lg">Composure</span><span class="text-blue-300 text-sm">Advisor Portal</span></div>
+        <div class="flex items-center gap-4"><span class="text-blue-200 text-sm">${user.firstName} ${user.lastName}</span><button id="signout-btn" class="text-blue-300 text-sm hover:text-white">Sign out</button></div>
+      </div>
+    </header>
+    <div class="max-w-6xl mx-auto px-6 py-8 fade-in">
+      <div class="flex items-center justify-between mb-6">
+        <div><h1 class="text-2xl font-semibold text-gray-900">Client Roster</h1><p class="text-gray-500 text-sm mt-0.5">${assessments.length} client${assessments.length!==1?'s':''} on record</p></div>
+      </div>
+      <div class="grid grid-cols-5 gap-3 mb-6">${statsBar}</div>
+      <div class="card overflow-hidden">
+        <table class="w-full">
+          <thead><tr class="bg-gray-50 border-b border-gray-200">
+            <th class="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Client</th>
+            <th class="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Assets</th>
+            <th class="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Horizon</th>
+            <th class="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Composure Index</th>
+            <th class="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Allocation Band</th>
+            <th class="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Assessed</th>
+            <th class="px-5 py-3"></th>
+          </tr></thead>
+          <tbody>${rows||'<tr><td colspan="7" class="px-5 py-12 text-center text-gray-400">No clients yet.</td></tr>'}</tbody>
+        </table>
+      </div>
+    </div>
+  </div>`;
+}
+
+// ── CLIENT DETAIL (ADVISOR) ────────────────────────────────────────
+function renderClientDetail() {
+  const advisorUser = Store.currentUser();
+  const clientUser = Store.getUser(viewState.clientId);
+  const assessment = Store.getAssessmentByUser(viewState.clientId);
+  if (!clientUser || !assessment) return `<div class="p-8">Client not found. <button id="back-btn" class="text-[#2C5282]">Back</button></div>`;
+
+  const { result, profile } = assessment;
+  const { band, alloc, factors, primaryFlag, stressProfile, volatility, maxDrawdown } = result;
+  const cfg = bandConfig(band);
+  const tab = viewState.tab || 'summary';
+
+  const tabs = ['summary','behavioral','allocation','ips'].map(t =>
+    `<button class="tab-btn ${tab===t?'active':''}" data-tab="${t}">${{summary:'Assessment Summary',behavioral:'Behavioral Breakdown',allocation:'Allocation Modeling',ips:'Generated IPS'}[t]}</button>`).join('');
+
+  let tabContent = '';
+  if (tab === 'summary') {
+    tabContent = `
+    <div class="grid grid-cols-2 gap-6 fade-in">
+      <div class="card p-6">
+        <h3 class="font-semibold text-gray-900 mb-4">Client Profile</h3>
+        <dl class="space-y-3">
+          ${[['Age',profile.age],['Time Horizon',profile.timeHorizonYears+' years'],['Investable Assets',profile.investableAssetsRange],['Income Range',profile.incomeRange],['Liquidity Need',profile.liquidityNeedLevel],['Tax Sensitivity',profile.taxSensitivityLevel],['Legacy Priority',profile.legacyPriorityLevel+'/10'],['Employment',profile.employmentStatus||'—'],['Dependents',profile.dependents??0]].map(([l,v])=>`
+          <div class="flex items-center justify-between text-sm"><dt class="text-gray-500">${l}</dt><dd class="font-medium text-gray-900">${v}</dd></div>`).join('')}
+        </dl>
+      </div>
+      <div class="card p-6">
+        <h3 class="font-semibold text-gray-900 mb-4">Behavioral Narrative</h3>
+        <p class="text-sm text-gray-600 leading-relaxed">${result.narrative}</p>
+        <div class="mt-4 pt-4 border-t border-gray-100">
+          <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Primary Behavioral Flag</p>
+          <p class="text-xs text-gray-600">${primaryFlag}</p>
+        </div>
+        <div class="mt-3">
+          <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Stress Response Profile</p>
+          <p class="text-xs text-gray-600">${stressProfile}</p>
+        </div>
+      </div>
+    </div>`;
+  } else if (tab === 'behavioral') {
+    const bars = [
+      ['Loss Aversion', factors.lossAversion, true],
+      ['Volatility Tolerance', factors.volatilityTolerance, false],
+      ['Drawdown Resilience', factors.drawdownResilience, false],
+      ['Horizon Conviction', factors.horizonConviction, false],
+      ['Liquidity Sensitivity', factors.liquiditySensitivity, true],
+      ['Confidence Stability', factors.confidenceDispersion, false],
+      ['Sequence Risk Sensitivity', factors.sequenceRiskSensitivity, true],
+      ['Regret Avoidance', factors.regretAvoidance, true],
+      ['Income Reliance', factors.incomeReliance, true],
+      ['Capital Preservation Priority', factors.capitalPreservation, true],
+    ].map(([label, score, invert]) => {
+      const color = invert ? (score>70?'bg-red-400':score>50?'bg-yellow-400':'bg-green-400') : (score>60?'bg-green-400':score>40?'bg-yellow-400':'bg-red-400');
+      return `<div class="flex items-center gap-3"><div class="w-44 text-xs text-gray-600 shrink-0">${label}</div><div class="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden"><div class="${color} h-full rounded-full" style="width:${score}%"></div></div><div class="w-8 text-xs font-mono text-gray-500 text-right">${score}</div></div>`;
+    }).join('');
+
+    tabContent = `
+    <div class="grid grid-cols-2 gap-6 fade-in">
+      <div class="card p-6">
+        <h3 class="font-semibold text-gray-900 mb-5">Factor Scores <span class="text-xs font-normal text-gray-400 ml-1">(0–100)</span></h3>
+        <div class="space-y-3">${bars}</div>
+        <div class="mt-4 pt-4 border-t border-gray-100 text-xs text-gray-400">Green: favorable for growth · Yellow: moderate · Red: constraining</div>
+        <canvas id="radarChart" class="mt-6" height="250"></canvas>
+      </div>
+      <div class="card p-6">
+        <h3 class="font-semibold text-gray-900 mb-4">Behavioral Flags</h3>
+        <div class="space-y-4">
+          <div class="bg-orange-50 border border-orange-200 rounded-lg p-4"><p class="text-xs font-semibold text-orange-700 uppercase tracking-wide mb-1.5">Primary Consideration</p><p class="text-sm text-orange-800">${primaryFlag}</p></div>
+          <div class="bg-blue-50 border border-blue-200 rounded-lg p-4"><p class="text-xs font-semibold text-blue-700 uppercase tracking-wide mb-1.5">Stress Response Profile</p><p class="text-sm text-blue-800">${stressProfile}</p></div>
+          <div class="card p-4 bg-gray-50">
+            <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Score Interpretation</p>
+            <div class="space-y-2 text-xs text-gray-600">
+              <p><span class="font-medium">Loss Aversion:</span> High score = more loss averse — requires conservative floor</p>
+              <p><span class="font-medium">Volatility Tolerance:</span> High score = tolerates volatility well — supports higher equity</p>
+              <p><span class="font-medium">Drawdown Resilience:</span> High score = holds through drawdowns — supports longer time horizons</p>
+              <p><span class="font-medium">Sequence Risk:</span> High score = sensitive to timing — consider glide-path or bucketing</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>`;
+  } else if (tab === 'allocation') {
+    tabContent = `
+    <div class="fade-in">
+      <div class="card p-6 mb-4">
+        <h3 class="font-semibold text-gray-900 mb-6">Strategic Allocation Framework — ${BAND_LABELS[band]}</h3>
+        <div class="grid grid-cols-4 gap-4 mb-6">
+          ${[['Global Equity',alloc.equityMin,alloc.equityMax],['Fixed Income',alloc.fixedMin,alloc.fixedMax],['Alternatives',alloc.altMin,alloc.altMax],['Cash',alloc.cashMin,alloc.cashMax]].map(([l,mn,mx])=>`
+          <div class="bg-gray-50 rounded-xl border border-gray-200 p-5 text-center">
+            <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">${l}</p>
+            <p class="text-2xl font-bold text-[#1A2B4A]">${mn}–${mx}%</p>
+          </div>`).join('')}
+        </div>
+        <canvas id="allocChart" height="80"></canvas>
+        <div class="grid grid-cols-2 gap-4 mt-6">
+          <div class="bg-gray-50 rounded-lg p-4 text-sm"><span class="font-medium text-gray-700">Expected Volatility:</span><span class="text-gray-600 ml-2">${volatility}</span></div>
+          <div class="bg-gray-50 rounded-lg p-4 text-sm"><span class="font-medium text-gray-700">Max Drawdown Estimate:</span><span class="text-gray-600 ml-2">${maxDrawdown}</span></div>
+        </div>
+      </div>
+    </div>`;
+  } else if (tab === 'ips') {
+    const ips = generateIPS(assessment);
+    const sections = [
+      ['I. Client Profile Summary', ips.clientProfileSummary],
+      ['II. Investment Objectives', ips.investmentObjectives],
+      ['III. Behavioral Alignment Profile', ips.riskAndBehavioralAlignment],
+      ['IV. Strategic Asset Allocation', ips.strategicAssetAllocation],
+      ['V. Rebalancing Policy', ips.rebalancingPolicy],
+      ['VI. Liquidity Management Policy', ips.liquidityManagement],
+      ['VII. Monitoring and Review Framework', ips.monitoringAndReview],
+      ['VIII. Behavioral Discipline Statement', ips.behavioralDisciplineStatement],
+    ].map(([title, content]) => `
+      <div class="card p-6">
+        <h3 class="font-semibold text-[#1A2B4A] mb-3 pb-2 border-b border-gray-100">${title}</h3>
+        <div class="text-sm text-gray-600 leading-relaxed whitespace-pre-wrap">${content}</div>
+      </div>`).join('');
+
+    tabContent = `
+    <div class="fade-in">
+      <div class="card p-5 mb-4 bg-[#1A2B4A] text-white no-print">
+        <div class="flex items-center justify-between">
+          <div><p class="text-blue-300 text-xs font-semibold uppercase tracking-wide mb-1">Investment Policy Statement</p><p class="text-lg font-semibold">Behavioral Alignment Framework — ${clientUser.firstName} ${clientUser.lastName}</p></div>
+          <button onclick="window.print()" class="btn-secondary text-sm bg-transparent text-white border-white hover:bg-white/10">Print / Save PDF</button>
+        </div>
+      </div>
+      <div class="space-y-4">${sections}</div>
+    </div>`;
+  }
+
+  return `
+  <div class="min-h-screen bg-gray-50">
+    <header class="bg-[#1A2B4A] text-white no-print">
+      <div class="max-w-6xl mx-auto px-6 py-4 flex items-center gap-4">
+        <button id="back-btn" class="text-blue-300 hover:text-white text-sm">← Back</button>
+        <span class="text-blue-300">|</span>
+        <span class="font-semibold text-lg">Composure</span>
+        <span class="text-blue-300 text-sm">Advisor Portal</span>
+      </div>
+    </header>
+    <div class="max-w-6xl mx-auto px-6 py-8 fade-in">
+      <div class="flex items-start justify-between mb-6">
+        <div>
+          <h1 class="text-2xl font-semibold text-gray-900">${clientUser.firstName} ${clientUser.lastName}</h1>
+          <p class="text-gray-500 text-sm mt-1">${clientUser.email} · Age ${profile.age} · ${profile.timeHorizonYears}-year horizon</p>
+        </div>
+      </div>
+      <div class="card p-5 mb-6 flex items-center gap-5 ${cfg.bg} no-print">
+        <div><p class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Composure Index</p><p class="text-3xl font-bold mt-1 ${cfg.text}">${BAND_LABELS[band]}</p></div>
+        <div class="h-10 w-px bg-gray-300"></div>
+        <div><p class="text-xs text-gray-500">Allocation Band</p><p class="text-sm font-semibold text-gray-800 mt-0.5">${alloc.label}</p></div>
+        <div class="h-10 w-px bg-gray-300"></div>
+        <div><p class="text-xs text-gray-500">Expected Volatility</p><p class="text-sm font-semibold text-gray-800 mt-0.5">${volatility}</p></div>
+        <div class="h-10 w-px bg-gray-300"></div>
+        <div><p class="text-xs text-gray-500">Max Drawdown Est.</p><p class="text-sm font-semibold text-gray-800 mt-0.5">${maxDrawdown}</p></div>
+      </div>
+      <div class="flex gap-0 mb-6 border-b border-gray-200 no-print">${tabs}</div>
+      ${tabContent}
+    </div>
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════════════════
+function navBar(user) {
+  return `<header class="bg-white border-b border-gray-200"><div class="max-w-2xl mx-auto px-4 py-4 flex items-center justify-between"><span class="font-semibold text-[#1A2B4A]">Composure</span><div class="flex items-center gap-4"><span class="text-sm text-gray-500">${user.firstName} ${user.lastName}</span><button id="signout-btn" class="text-sm text-gray-400 hover:text-gray-600">Sign out</button></div></div></header>`;
+}
+
+function bandConfig(band) {
+  const m = {
+    GUARDED:   { bg:'bg-blue-50',   border:'border-blue-200',   text:'text-blue-700',   dot:'bg-blue-400',   bar:'bg-blue-400'   },
+    MEASURED:  { bg:'bg-green-50',  border:'border-green-200',  text:'text-green-700',  dot:'bg-green-400',  bar:'bg-green-400'  },
+    BALANCED:  { bg:'bg-yellow-50', border:'border-yellow-200', text:'text-yellow-700', dot:'bg-yellow-400', bar:'bg-yellow-400' },
+    RESOLUTE:  { bg:'bg-orange-50', border:'border-orange-200', text:'text-orange-700', dot:'bg-orange-400', bar:'bg-orange-400' },
+    ASSERTIVE: { bg:'bg-purple-50', border:'border-purple-200', text:'text-purple-700', dot:'bg-purple-400', bar:'bg-purple-400' },
+  };
+  return m[band] || m.BALANCED;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// EVENT BINDING
+// ═══════════════════════════════════════════════════════════════════
+function bindEvents() {
+  // Sign out
+  document.getElementById('signout-btn')?.addEventListener('click', () => { Store.clearSession(); navigate('login'); });
+
+  // Login
+  document.getElementById('login-btn')?.addEventListener('click', () => {
+    const email = document.getElementById('login-email').value.trim();
+    const password = document.getElementById('login-password').value;
+    const user = Store.getUserByEmail(email);
+    const errEl = document.getElementById('login-error');
+    if (!user || user.password !== password) { errEl.textContent = 'Invalid email or password.'; errEl.classList.remove('hidden'); return; }
+    Store.setCurrentUser(user);
+    navigate(user.role === 'ADVISOR' ? 'advisorDashboard' : 'clientDashboard');
+  });
+  document.getElementById('login-email')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') document.getElementById('login-btn')?.click(); });
+  document.getElementById('login-password')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') document.getElementById('login-btn')?.click(); });
+  document.getElementById('go-register')?.addEventListener('click', (e) => { e.preventDefault(); navigate('register'); });
+
+  // Register
+  document.getElementById('go-login')?.addEventListener('click', (e) => { e.preventDefault(); navigate('login'); });
+  document.getElementById('role-client')?.addEventListener('click', () => {
+    document.getElementById('reg-role').value = 'CLIENT';
+    document.getElementById('role-client').className = 'flex-1 py-2 text-sm font-medium rounded-md transition-all bg-white text-[#1A2B4A] shadow-sm';
+    document.getElementById('role-advisor').className = 'flex-1 py-2 text-sm font-medium rounded-md transition-all text-gray-500 hover:text-gray-700';
+    document.getElementById('advisor-code-wrap').classList.add('hidden');
+  });
+  document.getElementById('role-advisor')?.addEventListener('click', () => {
+    document.getElementById('reg-role').value = 'ADVISOR';
+    document.getElementById('role-advisor').className = 'flex-1 py-2 text-sm font-medium rounded-md transition-all bg-white text-[#1A2B4A] shadow-sm';
+    document.getElementById('role-client').className = 'flex-1 py-2 text-sm font-medium rounded-md transition-all text-gray-500 hover:text-gray-700';
+    document.getElementById('advisor-code-wrap').classList.remove('hidden');
+  });
+  document.getElementById('register-btn')?.addEventListener('click', () => {
+    const first = document.getElementById('reg-first').value.trim();
+    const last = document.getElementById('reg-last').value.trim();
+    const email = document.getElementById('reg-email').value.trim();
+    const pass = document.getElementById('reg-pass').value;
+    const role = document.getElementById('reg-role').value;
+    const code = document.getElementById('reg-code')?.value;
+    const errEl = document.getElementById('reg-error');
+    if (!first || !last || !email || !pass) { errEl.textContent = 'Please fill in all fields.'; errEl.classList.remove('hidden'); return; }
+    if (pass.length < 8) { errEl.textContent = 'Password must be at least 8 characters.'; errEl.classList.remove('hidden'); return; }
+    if (role === 'ADVISOR' && code !== 'ADVISOR2024') { errEl.textContent = 'Invalid advisor code.'; errEl.classList.remove('hidden'); return; }
+    if (Store.getUserByEmail(email)) { errEl.textContent = 'An account with this email already exists.'; errEl.classList.remove('hidden'); return; }
+    const user = { id: 'usr_' + Date.now(), email, password: pass, firstName: first, lastName: last, role };
+    Store.saveUser(user);
+    Store.setCurrentUser(user);
+    navigate(role === 'ADVISOR' ? 'advisorDashboard' : 'clientProfile');
+  });
+
+  // Client profile
+  document.getElementById('p-legacy')?.addEventListener('input', function() { document.getElementById('p-legacy-val').textContent = this.value; });
+  document.getElementById('save-profile-btn')?.addEventListener('click', () => {
+    const age = parseInt(document.getElementById('p-age').value);
+    const horizon = parseInt(document.getElementById('p-horizon').value);
+    const income = document.getElementById('p-income').value;
+    const assets = document.getElementById('p-assets').value;
+    const liquidity = document.getElementById('p-liquidity').value;
+    const tax = document.getElementById('p-tax').value;
+    const legacy = parseInt(document.getElementById('p-legacy').value);
+    const employment = document.getElementById('p-employment').value;
+    const dependents = parseInt(document.getElementById('p-dependents').value)||0;
+    const errEl = document.getElementById('profile-error');
+    if (!age || !horizon || !income || !assets || !liquidity || !tax) { errEl.textContent = 'Please complete all required fields.'; errEl.classList.remove('hidden'); return; }
+    const user = Store.currentUser();
+    const profile = { age, timeHorizonYears: horizon, incomeRange: income, investableAssetsRange: assets, liquidityNeedLevel: liquidity, taxSensitivityLevel: tax, legacyPriorityLevel: legacy, employmentStatus: employment, dependents };
+    const existing = Store.getAssessmentByUser(user.id) || {};
+    Store.saveAssessment({ ...existing, id: existing.id || 'asmt_' + user.id, userId: user.id, advisorId: user.advisorId || 'adv_001', profile, completedAt: existing.completedAt });
+    assessmentAnswers = {};
+    assessmentCurrentIndex = 0;
+    navigate('assessment');
+  });
+
+  // Assessment navigation
+  document.querySelectorAll('.likert-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+      const val = parseInt(this.dataset.val);
+      const q = QUESTIONS[assessmentCurrentIndex];
+      assessmentAnswers[q.id] = val;
+      render();
+    });
+  });
+  document.getElementById('prev-btn')?.addEventListener('click', () => { if (assessmentCurrentIndex > 0) { assessmentCurrentIndex--; render(); } });
+  document.getElementById('next-btn')?.addEventListener('click', () => { if (assessmentCurrentIndex < QUESTIONS.length - 1) { assessmentCurrentIndex++; render(); } });
+  document.querySelectorAll('.dot').forEach(dot => { dot.addEventListener('click', function() { assessmentCurrentIndex = parseInt(this.dataset.idx); render(); }); });
+  document.getElementById('submit-assessment-btn')?.addEventListener('click', () => {
+    if (Object.keys(assessmentAnswers).length < QUESTIONS.length) return;
+    const user = Store.currentUser();
+    const responses = Object.entries(assessmentAnswers).map(([questionId, answerValue]) => ({ questionId, answerValue }));
+    const result = scoreAssessment(responses);
+    const existing = Store.getAssessmentByUser(user.id) || {};
+    Store.saveAssessment({ ...existing, id: existing.id || 'asmt_' + user.id, userId: user.id, advisorId: user.advisorId || 'adv_001', responses, result, completedAt: new Date().toISOString(), profile: existing.profile });
+    navigate('clientDashboard');
+  });
+
+  // Client dashboard
+  document.getElementById('start-assessment-btn')?.addEventListener('click', () => {
+    const user = Store.currentUser();
+    const existing = Store.getAssessmentByUser(user.id);
+    if (!existing?.profile) { navigate('clientProfile'); return; }
+    assessmentAnswers = {};
+    assessmentCurrentIndex = 0;
+    navigate('assessment');
+  });
+
+  // Advisor dashboard
+  document.querySelectorAll('.view-client-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => { e.stopPropagation(); navigate('clientDetail', { clientId: btn.dataset.clientId, tab: 'summary' }); });
+  });
+  document.querySelectorAll('tr[data-client-id]').forEach(row => {
+    row.addEventListener('click', () => navigate('clientDetail', { clientId: row.dataset.clientId, tab: 'summary' }));
+  });
+
+  // Client detail tabs
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', function() { navigate('clientDetail', { ...viewState, tab: this.dataset.tab }); });
+  });
+  document.getElementById('back-btn')?.addEventListener('click', () => {
+    const user = Store.currentUser();
+    navigate(user?.role === 'ADVISOR' ? 'advisorDashboard' : 'clientDashboard');
+  });
+
+  // Charts
+  if (document.getElementById('radarChart')) renderRadarChart();
+  if (document.getElementById('allocChart')) renderAllocChart();
+}
+
+function renderRadarChart() {
+  const assessment = Store.getAssessmentByUser(viewState.clientId);
+  if (!assessment?.result?.factors) return;
+  const f = assessment.result.factors;
+  new Chart(document.getElementById('radarChart'), {
+    type: 'radar',
+    data: {
+      labels: ['Volatility\nTolerance','Drawdown\nResilience','Horizon\nConviction','Confidence\nStability','Low Loss\nAversion','Low Regret','Low Seq.\nRisk','Low Liquidity\nSensitivity'],
+      datasets: [{ label: 'Profile', data: [f.volatilityTolerance, f.drawdownResilience, f.horizonConviction, f.confidenceDispersion, 100-f.lossAversion, 100-f.regretAvoidance, 100-f.sequenceRiskSensitivity, 100-f.liquiditySensitivity], backgroundColor: 'rgba(44,82,130,0.15)', borderColor: '#2C5282', borderWidth: 2, pointBackgroundColor: '#2C5282', pointRadius: 4 }]
+    },
+    options: { scales: { r: { min:0, max:100, ticks:{ stepSize:25, font:{size:9} }, pointLabels:{ font:{size:9} }, grid:{ color:'#E2E8F0' } } }, plugins:{ legend:{ display:false } } }
+  });
+}
+
+function renderAllocChart() {
+  const assessment = Store.getAssessmentByUser(viewState.clientId);
+  if (!assessment?.result?.alloc) return;
+  const a = assessment.result.alloc;
+  const midpoints = [
+    (a.equityMin + a.equityMax) / 2,
+    (a.fixedMin + a.fixedMax) / 2,
+    (a.altMin + a.altMax) / 2,
+    (a.cashMin + a.cashMax) / 2,
+  ];
+  new Chart(document.getElementById('allocChart'), {
+    type: 'bar',
+    data: {
+      labels: ['Global Equity', 'Fixed Income', 'Alternatives', 'Cash'],
+      datasets: [{
+        label: 'Target Midpoint (%)',
+        data: midpoints,
+        backgroundColor: ['rgba(44,82,130,0.8)','rgba(74,130,80,0.8)','rgba(130,90,44,0.8)','rgba(130,130,130,0.8)'],
+        borderRadius: 6,
+      }]
+    },
+    options: { indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { max: 100, ticks: { callback: v => v + '%' } } } }
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════════════
+seedDemoData();
+const existingUser = Store.currentUser();
+if (existingUser) {
+  navigate(existingUser.role === 'ADVISOR' ? 'advisorDashboard' : 'clientDashboard');
+} else {
+  navigate('login');
+}
+</script>
+</body>
+</html>
